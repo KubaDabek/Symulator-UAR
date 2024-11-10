@@ -21,6 +21,6 @@ int main() {
         q = arxModel.krok(sygnalKontrolny);
         std::cout << "Czas: " << i << " -> Sterowanie: " << sygnalKontrolny << " Wyjscie: " << q << std::endl;
     }
-
+    
     return 0;
 }
