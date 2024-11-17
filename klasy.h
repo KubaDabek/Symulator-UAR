@@ -10,26 +10,26 @@ class ARXModel {
 private:
     std::vector<double> A;       // wspolczynnik wyjscia
     std::vector<double> B;       // wspolczynnik wejscia
-    std::queue<double> buforWejscia;
-    std::queue<double> buforWyjscia;
+    std::queue<double> wejscieBufor;
+    std::queue<double> wyjscieBufor;
     int opoznienie;
     double szum;
     std::default_random_engine generator;
-    std::normal_distribution<double> dystrybucja;   // losowe wartosci zaklocenia
+    std::normal_distribution<double> dystrybucja;  // losowe wartosci zaklocenia
 
 public:
-    ARXModel(const std::vector<double>& a, const std::vector<double>& b, int k, double odchylenieSzumu = 0.01)
-        : A(a), B(b), opoznienie(k), szum(odchylenieSzumu), dystrybucja(0.0, odchylenieSzumu) {
-        // bufory dla wspó³czynników
-        buforWejscia = std::queue<double>(std::deque<double>(B.size(), 0.0));
-        buforWyjscia = std::queue<double>(std::deque<double>(A.size(), 0.0));
+    ARXModel(const std::vector<double>& a, const std::vector<double>& b, int k, double szum = 0.01)
+        : A(a), B(b), opoznienie(k), szum(szum), dystrybucja(0.0, szum) {
+        // bufory dla wspÃ³Å‚czynnikÃ³w
+        wejscieBufor = std::queue<double>(std::deque<double>(B.size(), 0.0));
+        wyjscieBufor = std::queue<double>(std::deque<double>(A.size(), 0.0));
     }
 
     // krok w symulacji
     double krok(double input) {
-        buforWejscia.push(input);
-        if (buforWejscia.size() > B.size()) {
-            buforWejscia.pop();
+        wejscieBufor.push(input);
+        if (wejscieBufor.size() > B.size()) {
+            wejscieBufor.pop();
         }
 
         // wartosc wyjsciowa
@@ -37,25 +37,25 @@ public:
 
         int i = 0;
         for (const auto& b : B) {
-            wyjscie += b * buforWejscia.front();
-            buforWejscia.pop();
-            buforWejscia.push(wyjscie); 
+            wyjscie += b * wejscieBufor.front();
+            wejscieBufor.pop();
+            wejscieBufor.push(wyjscie);
         }
 
         i = 0;
         for (const auto& a : A) {
-            wyjscie -= a * buforWyjscia.front();
-            buforWyjscia.pop();
-            buforWyjscia.push(wyjscie); 
+            wyjscie -= a * wyjscieBufor.front();
+            wyjscieBufor.pop();
+            wyjscieBufor.push(wyjscie);  // ustawienie ponownie w kolejce
         }
 
         // zaklocenie
         wyjscie += dystrybucja(generator);
 
-        // bufor wyjsciowy
-        buforWyjscia.push(wyjscie);
-        if (buforWyjscia.size() > A.size()) {
-            buforWyjscia.pop();
+        // aktualizacja buforu wyjsciowego
+        wyjscieBufor.push(wyjscie);
+        if (wyjscieBufor.size() > A.size()) {
+            wyjscieBufor.pop();
         }
 
         return wyjscie;
@@ -63,23 +63,22 @@ public:
 };
 
 template <typename T>
-T filtr(T wartosc, T nizsza, T wyzsza) {
-    return std::max(nizsza, std::min(wartosc, wyzsza));
+T filtr(T wartosc, T dolny, T gorny) {
+    return std::max(dolny, std::min(wartosc, gorny));
 }
 
 class PIDController {
 private:
     double kp, ki, kd;                  // wspolczynniki PID
-    double skumulowanaWartoscCalki;     // skumulowana wartosc calki
-    double bladPoprzedzajacy;           // poprzedzajacy blad dla cz³onu ró¿niczkuj¹cego
+    double calka, bladPoprzedzajacy;
     double dolnyLimit, gornyLimit;      // limity przeciwnasyceniowe
-    bool flagaPrzeciwnasyceniowa;       // flaga wlaczajaca przeciwnasycenie
+    bool flagaPrzeciwNasyceniowa;       // flaga wlaczajaca przeciwnasycenie
 
 public:
-    // Konstruktor ustawiaj¹cy poczatkowe wartosci wspolczynnikow PID i ograniczen wyjscia
+    // Konstruktor ustawiajacy poczatkowe wartosci wspolczynnikow PID i ograniczen wyjscia
     PIDController(double kp, double ki, double kd, double dolnyLimit = -1.0, double gornyLimit = 1.0)
-        : kp(kp), ki(ki), kd(kd), dolnyLimit(dolnyLimit), gornyLimit(gornyLimit), skumulowanaWartoscCalki(0.0), bladPoprzedzajacy(0.0),
-        flagaPrzeciwnasyceniowa(true) {}
+        : kp(kp), ki(ki), kd(kd), dolnyLimit(dolnyLimit), gornyLimit(gornyLimit), calka(0.0), bladPoprzedzajacy(0.0),
+        flagaPrzeciwNasyceniowa(true) {}
 
     // limity przeciwnasyceniowe
     void ustawLimity(double nizszy, double wyzszy) {
@@ -89,21 +88,21 @@ public:
 
     // resetowanie czlonow calkujacego i rozniczkujacego
     void reset() {
-        skumulowanaWartoscCalki = 0.0;
+        calka = 0.0;
         bladPoprzedzajacy = 0.0;
     }
 
     // obliczenie wartosc regulacji na podstawie uchybu
-    double oblicz(double wartoscZadana, double wartoscProcesu) {
-        double blad = wartoscZadana - wartoscProcesu;
-        skumulowanaWartoscCalki += blad;
+    double oblicz(double ustawWartosc, double wartoscProcesu) {
+        double blad = ustawWartosc - wartoscProcesu;
+        calka += blad;
         double pochodna = blad - bladPoprzedzajacy;
         bladPoprzedzajacy = blad;
 
-        double wyjscie = kp * blad + ki * skumulowanaWartoscCalki + kd * pochodna;
+        double wyjscie = kp * blad + ki * calka + kd * pochodna;
 
         // przeciwnasyceniowy filtr
-        if (flagaPrzeciwnasyceniowa) {
+        if (flagaPrzeciwNasyceniowa) {
             wyjscie = filtr(wyjscie, dolnyLimit, gornyLimit);
         }
 
