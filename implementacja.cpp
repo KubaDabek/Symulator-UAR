@@ -4,7 +4,7 @@
 using namespace std;
 
 int main() {
-    // przykladowe wspó³czynniki ARX
+    // wspolczynniki ARX
     std::vector<double> a = { -0.4 };
     std::vector<double> b = { 0.6 };
     ARXModel arxModel(a, b, 1);
@@ -13,14 +13,18 @@ int main() {
     PIDController pid(1.0, 0.1, 0.05);
     pid.ustawLimity(-1.0, 1.0);
 
-    // symulacja sterowania
-    double p = 1.0; // wartoœæ zadana
-    double q = 0.0;
-    for (int i = 0; i < 10; ++i) {
-        double sygnalKontrolny = pid.oblicz(p, q);
-        q = arxModel.krok(sygnalKontrolny);
-        std::cout << "Czas: " << i << " -> Sterowanie: " << sygnalKontrolny << " Wyjscie: " << q << std::endl;
+    // wartosc zadana
+    double wartoscZadana = 1.0;
+    double wartoscProcesu = 0.0;
+
+    // Symulacja
+    for (int i = 0; i < 100; ++i) {
+        double sygnalKontrolny = pid.oblicz(wartoscZadana, wartoscProcesu);
+        wartoscProcesu = arxModel.krok(sygnalKontrolny);
+        std::cout << "Krok: " << i
+            << " -> Sterowanie: " << sygnalKontrolny
+            << " Wyjscie: " << wartoscProcesu
+            << std::endl;
     }
-    
     return 0;
 }
